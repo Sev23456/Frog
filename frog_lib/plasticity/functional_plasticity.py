@@ -53,6 +53,31 @@ class FunctionalPlasticityManager:
         self.synaptic_scaling_enabled = True
         self.intrinsic_plasticity_enabled = True
     
+    def update(self, neurons: Optional[List] = None, synapses: Optional[List] = None, 
+               neural_activity: Optional[np.ndarray] = None, dt: float = 0.01):
+        """
+        Главный метод обновления функциональной пластичности.
+        
+        Args:
+            neurons: Список нейронов для гомеостатической регуляции
+            synapses: Список синапсов для STDP обучения
+            neural_activity: Массив активности для глобальной регуляции
+            dt: Временной шаг
+        """
+        # Применяем гомеостатическое масштабирование если есть нейроны
+        if neurons is not None and len(neurons) > 0:
+            self.apply_homeostatic_scaling(neurons, dt)
+            self.apply_intrinsic_plasticity(neurons, dt)
+        
+        # Применяем STDP если есть синапсы с информацией о спайках
+        if synapses is not None and len(synapses) > 0:
+            for synapse in synapses:
+                if hasattr(synapse, 'presynaptic_spike_time') and hasattr(synapse, 'postsynaptic_spike_time'):
+                    synapse.apply_stdp(
+                        synapse.presynaptic_spike_time,
+                        synapse.postsynaptic_spike_time
+                    )
+    
     def apply_homeostatic_scaling(self, neurons: List, dt: float):
         """Применить гомеостатическое масштабирование синаптических весов"""
         if not self.synaptic_scaling_enabled:

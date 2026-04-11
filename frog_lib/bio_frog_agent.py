@@ -92,7 +92,7 @@ class BioFrogBrain:
         self.motor_hierarchy = MotorHierarchy()
         
         # ===== МОДУЛЯТОРНЫЕ СИСТЕМЫ =====
-        self.glial_network = GlialNetwork(num_astrocytes=24)
+        self.glial_network = GlialNetwork(num_astrocytes=25)  # 5x5 grid = 25 astrocytes
         self.dopamine_level = 0.85 if juvenile_mode else 0.5
         self.serotonin_level = 0.75 if juvenile_mode else 0.5
         
@@ -294,8 +294,17 @@ class BioFrogBrain:
         # 6. ПЛАСТИЧНОСТЬ
         self.apply_plasticity(retinal_output)
         
-        # 7. ОБНОВЛЕНИЕ ГЛИИ
-        self.glial_network.update({}, [], dt)
+        # 7. ОБНОВЛЕНИЕ ГЛИИ (передаём реальную активность тектума и позиции нейронов)
+        # Используем output тектума как карту активности (16 значений для 16 колонок)
+        tectal_activity = self.tectum.tectal_output if hasattr(self.tectum, 'tectal_output') else np.array([])
+        tectum_positions = self.tectum.get_neuron_positions() if hasattr(self.tectum, 'get_neuron_positions') else np.array([])
+        self.glial_network.update(tectal_activity, tectum_positions, dt)
+        
+        # 8. МОДУЛЯЦИЯ СИНАПСОВ ГЛИЕЙ (если есть синапсы)
+        if len(self.synapses) > 0 and self.glial_network.average_gliotransmitter > 0:
+            for astrocyte in self.glial_network.astrocytes:
+                if astrocyte.gliotransmitter_release > 0:
+                    astrocyte.modulate_synapses(self.synapses, weight_modifier=0.05)
         
         # История
         self.activity_history.append(neural_activity)
