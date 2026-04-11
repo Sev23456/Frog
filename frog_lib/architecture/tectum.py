@@ -1,145 +1,141 @@
 # -*- coding: utf-8 -*-
 """
-Тектум (визуальный центр обработки движения)
-
-Включает:
-- TectalColumn: колонка в тектуме для обработки направления движения
-- Tectum: полная архитектура тектума
+Toy tectum-like motion selection layer.
 """
 
-import numpy as np
+from __future__ import annotations
+
 from typing import List, Tuple
-from ..core.biological_neuron import PyramidalNeuron, FastSpikingInterneuron
-from ..core.synapse_models import BiologicalSynapse
+
+import numpy as np
+
+from ..core.biological_neuron import FastSpikingInterneuron, PyramidalNeuron
 
 
 class TectalColumn:
-    """Колонка в тектуме, специализированная на обработке направленного движения"""
-    
     def __init__(self, position: Tuple[float, float], preferred_direction: float):
         self.position = np.array(position, dtype=float)
-        self.preferred_direction = preferred_direction  # в радианах
-        
-        # Нейроны в колонке
-        self.pyramidal_neurons = [PyramidalNeuron() for _ in range(8)]
-        self.interneurons = [FastSpikingInterneuron() for _ in range(4)]
-        self.output_neurons = [PyramidalNeuron() for _ in range(2)]
-        
-        # Синапсы между слоями
-        self.pyramidal_to_interneurons = [[BiologicalSynapse() for _ in range(4)] 
-                                         for _ in range(8)]
-        self.interneurons_to_output = [[BiologicalSynapse() for _ in range(2)] 
-                                      for _ in range(4)]
-        
+        self.preferred_direction = preferred_direction
+
+        self.pyramidal_neurons = [PyramidalNeuron(threshold=-53.0) for _ in range(6)]
+        self.interneurons = [FastSpikingInterneuron(threshold=-54.0) for _ in range(3)]
+        self.output_neurons = [PyramidalNeuron(threshold=-52.0) for _ in range(2)]
+
         self.output = 0.0
         self.direction_selectivity = 1.0
-    
+
     def process_visual_input(self, visual_input: float, motion_vector: np.ndarray) -> float:
-        """Обработать визуальный ввод с учётом направления движения"""
-        # Вычислить селективность к направлению
         if np.linalg.norm(motion_vector) > 0.01:
             motion_direction = np.arctan2(motion_vector[1], motion_vector[0])
-            direction_difference = np.abs(motion_direction - self.preferred_direction)
-            
-            # Циклическое расстояние
-            direction_difference = np.min([direction_difference, 2 * np.pi - direction_difference])
-            
-            # Гауссова селективность
-            self.direction_selectivity = np.exp(-(direction_difference ** 2) / (2 * 0.5 ** 2))
+            direction_difference = abs(motion_direction - self.preferred_direction)
+            direction_difference = min(direction_difference, 2.0 * np.pi - direction_difference)
+            self.direction_selectivity = float(np.exp(-(direction_difference**2) / (2 * 0.55**2)))
         else:
-            self.direction_selectivity = 0.5
-        
-        # Активация пирамидальных нейронов
-        input_current = visual_input * 10.0 * self.direction_selectivity
-        for pyr in self.pyramidal_neurons:
-            pyr.integrate(0.01, input_current)
-        
-        # Интернейроны опосредуют торможение
-        inter_input = np.mean([pyr.spike_output for pyr in self.pyramidal_neurons]) * 15.0
-        for inter in self.interneurons:
-            inter.integrate(0.01, inter_input)
-        
-        # Выходные нейроны интегрируют возбуждающий и тормозящий вводы
-        exc_input = np.mean([pyr.spike_output for pyr in self.pyramidal_neurons]) * 10.0
-        inh_input = np.mean([inter.spike_output for inter in self.interneurons]) * 5.0
-        
-        for out in self.output_neurons:
-            out.integrate(0.01, exc_input - inh_input)
-        
-        self.output = np.mean([out.spike_output for out in self.output_neurons])
+            self.direction_selectivity = 0.25
+
+        salience = float(np.clip(visual_input, 0.0, 2.0))
+        pyramidal_drive = salience * (16.0 + 18.0 * self.direction_selectivity)
+        for neuron in self.pyramidal_neurons:
+            neuron.integrate(0.01, pyramidal_drive, apical_input=0.25 + self.direction_selectivity)
+
+        inter_input = np.mean([pyr.spike_output for pyr in self.pyramidal_neurons]) * 8.0 + salience * 2.0
+        for neuron in self.interneurons:
+            neuron.integrate(0.01, inter_input)
+
+        exc_input = np.mean([pyr.spike_output for pyr in self.pyramidal_neurons]) * 18.0 + salience * 6.0 * self.direction_selectivity
+        inh_input = np.mean([inter.spike_output for inter in self.interneurons]) * 3.0
+        for neuron in self.output_neurons:
+            neuron.integrate(0.01, exc_input - inh_input, apical_input=self.direction_selectivity)
+
+        spike_component = np.mean([out.spike_output for out in self.output_neurons])
+        self.output = float(np.clip(0.75 * spike_component + 0.55 * self.direction_selectivity * salience, 0.0, 2.5))
         return self.output
-    
+
     def reset(self):
-        """Сброс колонки"""
-        for pyr in self.pyramidal_neurons:
-            pyr.reset()
-        for inter in self.interneurons:
-            inter.reset()
-        for out in self.output_neurons:
-            out.reset()
+        for neuron in self.pyramidal_neurons:
+            neuron.reset()
+        for neuron in self.interneurons:
+            neuron.reset()
+        for neuron in self.output_neurons:
+            neuron.reset()
 
 
 class Tectum:
-    """Полная архитектура тектума с сетью колонок"""
-    
     def __init__(self, columns: int = 16, neurons_per_column: int = 12):
         self.num_columns = columns
         self.neurons_per_column = neurons_per_column
-        
-        # Создание колонок с предпочтительными направлениями
         self.columns: List[TectalColumn] = []
-        for i in range(columns):
-            x = (i % 4) * 100.0
-            y = (i // 4) * 100.0
-            preferred_dir = (i / columns) * 2 * np.pi
-            column = TectalColumn((x, y), preferred_dir)
-            self.columns.append(column)
-        
-        self.tectal_output = np.zeros(columns)
+        for index in range(columns):
+            x = (index % 4) * 100.0
+            y = (index // 4) * 100.0
+            preferred_dir = (index / columns) * 2.0 * np.pi
+            self.columns.append(TectalColumn((x, y), preferred_dir))
+
+        self.tectal_output = np.zeros(columns, dtype=float)
         self.dominant_direction = 0.0
-    
+        self.direction_vector = np.zeros(2, dtype=float)
+        self.preferred_vectors = np.array(
+            [[np.cos(column.preferred_direction), np.sin(column.preferred_direction)] for column in self.columns],
+            dtype=float,
+        )
+
     def process(self, retinal_input: np.ndarray, motion_vectors: List[np.ndarray]) -> np.ndarray:
-        """
-        Обработать ретинальный ввод с информацией о движении
-        retinal_input: выход сетчатки (100 нейронов)
-        motion_vectors: векторы движения для каждого объекта
-        """
-        self.tectal_output = np.zeros(self.num_columns)
-        
-        # Агрегировать зрительный ввод
-        mean_visual_input = np.mean(retinal_input) if len(retinal_input) > 0 else 0.0
-        
-        # Агрегировать вектор движения
-        if len(motion_vectors) > 0:
-            aggregated_motion = np.mean(motion_vectors, axis=0)
+        self.tectal_output = np.zeros(self.num_columns, dtype=float)
+
+        if len(retinal_input) == 0:
+            salient_visual_input = 0.0
         else:
-            aggregated_motion = np.zeros(2)
-        
-        # Обработать каждую колонку
-        for i, column in enumerate(self.columns):
-            output = column.process_visual_input(mean_visual_input, aggregated_motion)
-            self.tectal_output[i] = output
-        
-        # Вычислить доминирующее направление
+            top_k = min(10, len(retinal_input))
+            sorted_activity = np.sort(retinal_input)
+            salient_visual_input = float(0.4 * np.mean(sorted_activity[-top_k:]) + 0.6 * sorted_activity[-1])
+
+        if motion_vectors:
+            normalized_motion = []
+            for vector in motion_vectors:
+                motion = np.array(vector, dtype=float)
+                norm = np.linalg.norm(motion)
+                if norm > 1e-6:
+                    normalized_motion.append(motion / norm)
+            aggregated_motion = np.mean(normalized_motion, axis=0) if normalized_motion else np.zeros(2, dtype=float)
+        else:
+            aggregated_motion = np.zeros(2, dtype=float)
+
+        for idx, column in enumerate(self.columns):
+            self.tectal_output[idx] = column.process_visual_input(salient_visual_input, aggregated_motion)
+
         if np.sum(self.tectal_output) > 0:
-            dominant_idx = np.argmax(self.tectal_output)
-            self.dominant_direction = (dominant_idx / self.num_columns) * 2 * np.pi
-        
+            dominant_idx = int(np.argmax(self.tectal_output))
+            self.dominant_direction = (dominant_idx / self.num_columns) * 2.0 * np.pi
+            weighted_direction = self.tectal_output @ self.preferred_vectors
+            direction_norm = np.linalg.norm(weighted_direction)
+            if direction_norm > 1e-6:
+                self.direction_vector = weighted_direction / direction_norm
+            else:
+                self.direction_vector = np.array(
+                    [np.cos(self.dominant_direction), np.sin(self.dominant_direction)],
+                    dtype=float,
+                )
+        else:
+            self.direction_vector = np.zeros(2, dtype=float)
+
         return self.tectal_output
-    
+
     def get_movement_command(self) -> Tuple[float, float]:
-        """Получить команду движения на основе активности тектума"""
-        if np.sum(self.tectal_output) == 0:
+        total_activity = float(np.sum(self.tectal_output))
+        if total_activity <= 1e-6:
             return (0.0, 0.0)
-        
-        # Декодировать направление из активности популяции
-        direction_angle = self.dominant_direction
-        magnitude = np.sum(self.tectal_output) / self.num_columns
-        
-        return (magnitude * np.cos(direction_angle), magnitude * np.sin(direction_angle))
-    
+
+        magnitude = float(
+            np.clip(
+                0.45 * np.max(self.tectal_output) + total_activity / (self.num_columns * 1.6),
+                0.0,
+                1.0,
+            )
+        )
+        return (magnitude * self.direction_vector[0], magnitude * self.direction_vector[1])
+
     def reset(self):
-        """Сброс тектума"""
         for column in self.columns:
             column.reset()
-        self.tectal_output = np.zeros(self.num_columns)
+        self.tectal_output = np.zeros(self.num_columns, dtype=float)
+        self.direction_vector = np.zeros(2, dtype=float)
