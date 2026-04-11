@@ -143,3 +143,12 @@ class Tectum:
         for column in self.columns:
             column.reset()
         self.tectal_output = np.zeros(self.num_columns)
+    
+    def get_neuron_positions(self) -> np.ndarray:
+        """Получить позиции всех нейронов в тектуме для глиальной модуляции"""
+        positions = []
+        for column in self.columns:
+            # Добавляем позицию колонки
+            positions.append(column.position)
+            # Можно добавить позиции отдельных нейронов если нужно
+        return np.array(positions) if positions else np.array([])

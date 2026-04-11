@@ -84,12 +84,16 @@ class Astrocyte:
 class GlialNetwork:
     """Сеть глиальных клеток для масштабной модуляции мозга"""
     
-    def __init__(self, num_astrocytes: int = 24, brain_size: Tuple[float, float] = (400.0, 400.0)):
+    def __init__(self, num_astrocytes: int = 25, brain_size: Tuple[float, float] = (400.0, 400.0)):
         self.num_astrocytes = num_astrocytes
         self.brain_size = brain_size
         
-        # Создаём сетку астроцитов
+        # Создаём сетку астроцитов (используем perfect square для равномерной сетки)
         grid_size = int(np.sqrt(num_astrocytes))
+        # Корректируем num_astrocytes до ближайшего perfect square если нужно
+        if grid_size * grid_size != num_astrocytes:
+            grid_size = max(1, grid_size)
+            self.num_astrocytes = grid_size * grid_size
         self.astrocytes: List[Astrocyte] = []
         
         for i in range(grid_size):
