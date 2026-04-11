@@ -1,0 +1,22 @@
+{
+  "frog": {
+    "total_steps": 2454,
+    "caught_flies": 9,
+    "success_rate": 0.0025,
+    "final_energy": 29.52896922025903,
+    "avg_dopamine": 0.78055,
+    "avg_neural_activity": 0.034721672750378615,
+    "avg_fatigue": 0.028697271819588005,
+    "avg_alignment": 0.05111860391214414,
+    "avg_distance_to_target": 138.41340095600316,
+    "avg_speed": 0.0840206232948012,
+    "exploration_ratio": 0.0,
+    "is_juvenile": true,
+    "juvenile_age": 2454,
+    "juvenile_progress": 0.4908,
+    "architecture_signature": "stateful neuromodulated exploratory pursuit"
+  },
+  "step_count": 2454,
+  "caught_count": 9,
+  "timestamp": "2026-04-11T17:47:28"
+}

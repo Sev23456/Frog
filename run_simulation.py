@@ -1,94 +1,49 @@
 #!/usr/bin/env python3
-"""
-╔════════════════════════════════════════════════════════════════════════════╗
-║              BioFrog v2.0 - БЫСТРЫЙ ЗАПУСК СИМУЛЯЦИИ                      ║
-║          Простой способ запустить симуляцию с режимом детства              ║
-╚════════════════════════════════════════════════════════════════════════════╝
+# -*- coding: utf-8 -*-
 
-Использование:
-    python run_simulation.py
-"""
+"""Quick launcher for the toy bio-inspired BioFrog simulation."""
 
-import sys
-import os
-
-# Убедитесь, что текущая директория в пути импорта
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from __future__ import annotations
 
 from frog_lib import BioFlyCatchingSimulation
 
 
 def main():
-    """Запуск базовой симуляции"""
-    
-    print("\n" + "="*70)
-    print("BioFrog v2.0 - СИМУЛЯЦИЯ")
-    print("="*70)
-    print("""
-    Запуск симуляции с режимом детства...
-    
-    Параметры:
-    - Размер: 800x600
-    - Количество мух: 15
-    - Режим детства: ВКЛ
-    - Длительность: 5000 шагов
-    
-    Нажмите Q в окне для остановки или ждите завершения.
-    """)
-    
+    print("\n" + "=" * 70)
+    print("BioFrog quick launcher")
+    print("Toy bio-inspired frog in juvenile mode")
+    print("=" * 70)
+
+    sim = BioFlyCatchingSimulation(
+        width=800,
+        height=600,
+        bio_mode=True,
+        juvenile_mode=True,
+        num_flies=15,
+        headless=False,
+    )
+
     try:
-        # Создаём симуляцию с режимом детства
-        sim = BioFlyCatchingSimulation(
-            width=800,
-            height=600,
-            bio_mode=True,
-            juvenile_mode=True,  # ← РЕЖИМ ДЕТСТВА
-            num_flies=15,
-            headless=False  # Показать визуализацию
-        )
-        
-        print("⏱️  Симуляция запущена...")
-        
-        # Запускаем на 5000 шагов
         sim.run_simulation(max_steps=5000)
-        
-        # Получаем статистику
         stats = sim.get_statistics()
-        
-        print("\n" + "="*70)
-        print("📊 РЕЗУЛЬТАТЫ СИМУЛЯЦИИ")
-        print("="*70)
-        print(f"✓ Общее количество шагов: {stats['total_steps']}")
-        print(f"✓ Поймано мух: {stats['caught_flies']}")
-        print(f"✓ Процент успеха: {stats['success_rate']*100:.1f}%")
-        print(f"✓ Финальная энергия: {stats['final_energy']:.2f}")
-        print(f"✓ Средний дофамин: {stats['avg_dopamine']:.2f}")
-        print(f"✓ Режим развития: {'Детство' if stats['is_juvenile'] else 'Взрослость'}")
-        if stats['is_juvenile']:
-            print(f"✓ Прогресс детства: {stats['juvenile_age']:.1f}% от 5000 шагов")
-        
-        # Сохраняем результаты
-        print("\n📈 Построение графиков результатов...")
+
+        print("\n" + "=" * 70)
+        print("Simulation results")
+        print("=" * 70)
+        print(f"Steps: {stats['total_steps']}")
+        print(f"Catches: {stats['caught_flies']}")
+        print(f"Success rate: {stats['success_rate'] * 100:.1f}%")
+        print(f"Final energy: {stats['final_energy']:.2f}")
+        print(f"Avg dopamine: {stats['avg_dopamine']:.3f}")
+        print(f"Avg neural activity: {stats['avg_neural_activity']:.3f}")
+        print(f"Developmental state: {'juvenile' if stats['is_juvenile'] else 'adult'}")
+        print(f"Juvenile progress: {stats['juvenile_progress'] * 100:.1f}%")
+
+        print("\nSaving plots and state when available...")
         sim.plot_results()
-        print("✓ Графики сохранены в biofrog_results.png")
-        
-        # Сохраняем состояние
-        print("\n💾 Сохранение статистики...")
-        sim.save_state('biofrog_simulation_state.json')
-        print("✓ Состояние сохранено в biofrog_simulation_state.json")
-        
+        sim.save_state("biofrog_simulation_state.json")
+    finally:
         sim.close()
-        
-        print("\n✅ Симуляция завершена успешно!")
-        print("="*70 + "\n")
-        
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Симуляция прервана пользователем")
-        sim.close()
-    except Exception as e:
-        print(f"\n❌ Ошибка при выполнении: {e}")
-        import traceback
-        traceback.print_exc()
 
 
 if __name__ == "__main__":

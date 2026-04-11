@@ -1,0 +1,12 @@
+{
+  "total_steps": 300,
+  "caught_flies": 6,
+  "success_rate": 0.02,
+  "final_energy": 29.966787563566175,
+  "avg_alignment": 0.991548931343807,
+  "avg_distance_to_target": 121.57206182024495,
+  "avg_speed": 0.4944350022517955,
+  "movement_smoothness": 0.9923884329082868,
+  "avg_controller_signal": 0.1694737389187018,
+  "architecture_signature": "smooth continuous pursuit"
+}

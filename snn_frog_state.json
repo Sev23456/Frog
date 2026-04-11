@@ -1,0 +1,15 @@
+{
+  "total_steps": 300,
+  "caught_flies": 6,
+  "success_rate": 0.02,
+  "final_energy": 29.998079788446535,
+  "avg_alignment": 0.7731261800441778,
+  "avg_distance_to_target": 116.74200108597609,
+  "avg_speed": 0.6130469658500016,
+  "avg_spike_rate": 0.12555555555555556,
+  "avg_spike_count": 6.026666666666666,
+  "burst_ratio": 0.8566666666666667,
+  "silent_ratio": 0.03333333333333333,
+  "avg_eligibility_norm": 133.68795820787588,
+  "architecture_signature": "sparse event-driven pursuit"
+}
