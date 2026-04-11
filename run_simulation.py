@@ -24,7 +24,7 @@ def main():
     )
 
     try:
-        sim.run_simulation(max_steps=5000)
+        sim.run_simulation(max_steps=25000)
         stats = sim.get_statistics()
 
         print("\n" + "=" * 70)
@@ -33,11 +33,13 @@ def main():
         print(f"Steps: {stats['total_steps']}")
         print(f"Catches: {stats['caught_flies']}")
         print(f"Success rate: {stats['success_rate'] * 100:.1f}%")
-        print(f"Final energy: {stats['final_energy']:.2f}")
-        print(f"Avg dopamine: {stats['avg_dopamine']:.3f}")
-        print(f"Avg neural activity: {stats['avg_neural_activity']:.3f}")
+        print(f"\n🎮 GAME MECHANICS ENERGY (0-30 scale, ANN/SNN compatible):")
+        print(f"   Final: {stats['final_energy']:.1f}/30.0")
+        print(f"\n🧬 BIOLOGICAL ENERGY (0-1 scale, for reference):")
+        print(f"   Final: {stats['final_biological_energy']:.3f}")
+        print(f"\nAvg dopamine: {stats['avg_dopamine']:.3f}")
         print(f"Developmental state: {'juvenile' if stats['is_juvenile'] else 'adult'}")
-        print(f"Juvenile progress: {stats['juvenile_progress'] * 100:.1f}%")
+        print(f"Juvenile age: {stats['juvenile_age']:.0f} steps")
 
         print("\nSaving plots and state when available...")
         sim.plot_results()

@@ -43,9 +43,10 @@ def print_stats(title: str, stats):
     print(f"Success rate: {stats['success_rate'] * 100:.1f}%")
     print(f"Final energy: {stats['final_energy']:.2f}")
     print(f"Avg dopamine: {stats.get('avg_dopamine', 0.0):.3f}")
-    print(f"Avg neural activity: {stats.get('avg_neural_activity', 0.0):.3f}")
-    print(f"Avg speed: {stats.get('avg_speed', 0.0):.3f}")
-    print(f"Signature: {stats['architecture_signature']}")
+    if 'is_juvenile' in stats:
+        print(f"Developmental state: {'juvenile' if stats['is_juvenile'] else 'adult'}")
+    if 'architecture_signature' in stats:
+        print(f"Signature: {stats['architecture_signature']}")
 
 
 def option_visual_juvenile():
@@ -84,9 +85,8 @@ def option_compare_bio_modes():
         print(
             f"{label:8s} catches={stats['caught_flies']:3d} "
             f"success={stats['success_rate'] * 100:5.1f}% "
-            f"dopamine={stats['avg_dopamine']:.3f} "
-            f"activity={stats['avg_neural_activity']:.3f} "
-            f"speed={stats['avg_speed']:.3f}"
+            f"dopamine={stats.get('avg_dopamine', 0.0):.3f} "
+            f"energy={stats.get('final_energy', 0.0):.2f}"
         )
 
 
