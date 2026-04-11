@@ -227,6 +227,7 @@ class BioFlyCatchingSimulation:
         
         # Отслеживание статистики
         self.energy_history.append(agent_state['energy'])
+        # Добавим игровую энергию в граф если есть
         self.dopamine_history.append(agent_state['dopamine'])
         self.juvenile_history.append(1.0 if agent_state['is_juvenile'] else 0.0)
         
@@ -367,6 +368,11 @@ class BioFlyCatchingSimulation:
                 
                 agent_state = self.step()
                 
+                # ИГРОВОЙ OVER: энергия кончилась
+                if agent_state['game_energy'] <= 0:
+                    print(f"\n⚡ GAME OVER on step {step}: Energy depleted!")
+                    return
+                
                 if not self.headless:
                     self.draw()
                     self.clock.tick(60)  # 60 FPS
@@ -374,7 +380,7 @@ class BioFlyCatchingSimulation:
                 if step % 1000 == 0:
                     print(f"  Шаг {step}/{max_steps} | "
                           f"Мух: {self.frog.caught_flies} | "
-                          f"Энергия: {agent_state['energy']:.2f} | "
+                          f"Энергия(игр): {agent_state['game_energy']:.1f}/30 | "
                           f"Допамин: {agent_state['dopamine']:.2f} | "
                           f"Режим: {'👶' if agent_state['is_juvenile'] else '🦗'}")
         
@@ -383,7 +389,7 @@ class BioFlyCatchingSimulation:
         
         print(f"✅ Симуляция завершена!")
         print(f"   Всего поймано мух: {self.frog.caught_flies}")
-        catch_rate = sum(self.catch_history) / len(self.catch_history) * 100 if self.catch_history else 0
+        catch_rate = (self.frog.caught_flies / self.step_count * 100) if self.step_count > 0 else 0
         print(f"   Успешность охоты: {catch_rate:.1f}%")
     
     def plot_results(self):
@@ -469,12 +475,15 @@ class BioFlyCatchingSimulation:
     
     def get_statistics(self) -> Dict[str, Any]:
         """Получить статистику симуляции"""
-        success_rate = (sum(self.catch_history) / len(self.catch_history)) if self.catch_history else 0.0
+        # Считать success_rate на основе реального счетчика пойманных мух, а не catch_history
+        # (catch_history может быть неточна из-за времени синхронизации)
+        success_rate = self.frog.caught_flies / self.step_count if self.step_count > 0 else 0.0
         return {
             'total_steps': self.step_count,
             'caught_flies': self.frog.caught_flies,
             'success_rate': success_rate,
-            'final_energy': self.frog.energy,
+            'final_energy': self.frog.game_energy,  # Игровая энергия (0-30), а не биологическая
+            'final_biological_energy': self.frog.energy,  # Биологическая (для справки)
             'avg_dopamine': np.mean(list(self.dopamine_history)) if self.dopamine_history else 0.0,
             'is_juvenile': self.frog.brain.is_juvenile,
             'juvenile_age': self.frog.brain.juvenile_age

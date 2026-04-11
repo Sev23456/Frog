@@ -92,7 +92,7 @@ class BioFrogBrain:
         self.motor_hierarchy = MotorHierarchy()
         
         # ===== МОДУЛЯТОРНЫЕ СИСТЕМЫ =====
-        self.glial_network = GlialNetwork(num_astrocytes=24)
+        self.glial_network = GlialNetwork(num_astrocytes=25)  # 5x5 grid = 25 astrocytes
         self.dopamine_level = 0.85 if juvenile_mode else 0.5
         self.serotonin_level = 0.75 if juvenile_mode else 0.5
         
@@ -180,6 +180,8 @@ class BioFrogBrain:
         """
         Обновление системы нейромодуляции.
         
+        ГЛИЯ КОНТРОЛИРУЕТ НЕЙРОМОДУЛЯЦИЮ НА ОСНОВЕ ЭНЕРГИИ!
+        
         Args:
             reward: Сигнал награды
             neural_activity: Уровень нейронной активности
@@ -196,6 +198,9 @@ class BioFrogBrain:
             # Во взрослости ниже базовый
             self.dopamine_level = 0.5 + reward_component + exploration_component
         
+        # ЭНЕРГЕТИЧЕСКАЯ МОДУЛЯЦИЯ: низкая энергия снижает дофамин
+        energy_modulation = max(0.3, self.metabolism.glucose_level)  # 0.3-1.0
+        self.dopamine_level *= energy_modulation
         self.dopamine_level = np.clip(self.dopamine_level, 0.0, 1.0)
         
         # Серотонин: от успеха и состояния энергии
@@ -205,6 +210,9 @@ class BioFrogBrain:
         else:
             self.serotonin_level = 0.5 + 0.1 * energy_component
         
+        # ГЛИАЛЬНАЯ МОДУЛЯЦИЯ: глия снижает серотонин при низкой энергии
+        glial_excitability = self.glial_network.get_excitability_modulation()
+        self.serotonin_level *= glial_excitability
         self.serotonin_level = np.clip(self.serotonin_level, 0.0, 1.0)
         
         # Выпуск нейромодуляторов в пространство
@@ -248,7 +256,8 @@ class BioFrogBrain:
         self.metabolism.update(dt, movement_intensity, neural_activity)
     
     def update(self, visual_scene: np.ndarray, motion_vectors: List[Tuple[float, float]],
-               reward: float = 0.0, dt: Optional[float] = None) -> Dict[str, Any]:
+               reward: float = 0.0, energy_level: float = 1.0, game_energy_ratio: float = 1.0, 
+               dt: Optional[float] = None) -> Dict[str, Any]:
         """
         Главный цикл обновления мозга.
         
@@ -256,6 +265,8 @@ class BioFrogBrain:
             visual_scene: Визуальная сцена
             motion_vectors: Векторы движения объектов
             reward: Сигнал награды (для модуляции обучения)
+            energy_level: Биологическая энергия (0-1) для глии
+            game_energy_ratio: Игровая энергия (0-1) для поведения (как в ANN/SNN)
             dt: Временной шаг (если None, используется self.dt)
             
         Returns:
@@ -274,6 +285,12 @@ class BioFrogBrain:
         # 1. СЕНСОРНАЯ ОБРАБОТКА
         sensory_data = self.process_sensory_input(visual_scene)
         retinal_output = sensory_data['retinal_output']
+        
+        # ЭНЕРГЕТИЧЕСКАЯ МОДУЛЯЦИЯ ВОЗБУДИМОСТИ (ДО того, как сигнал идёт в мозг)
+        # Низкая энергия = нейроны менее возбудимы (слабый ответ на стимулы)
+        # Используем game_energy_ratio (0-1 шкала как в ANN/SNN)
+        energy_excitability_factor = 0.5 + 0.5 * game_energy_ratio  # 0.5-1.0
+        retinal_output = retinal_output * energy_excitability_factor
         
         # 2. ОБРАБОТКА ДВИЖЕНИЯ
         motion_data = self.process_motion(retinal_output, motion_vectors)
@@ -294,8 +311,20 @@ class BioFrogBrain:
         # 6. ПЛАСТИЧНОСТЬ
         self.apply_plasticity(retinal_output)
         
-        # 7. ОБНОВЛЕНИЕ ГЛИИ
-        self.glial_network.update({}, [], dt)
+        # 7. ОБНОВЛЕНИЕ ГЛИИ (передаём реальную активность тектума, позиции нейронов И ЭНЕРГИЮ!)
+        # Глия - это энергетический интегратор мозга!
+        # Используем output тектума как карту активности (16 значений для 16 колонок)
+        tectal_activity = self.tectum.tectal_output if hasattr(self.tectum, 'tectal_output') else np.array([])
+        tectum_positions = self.tectum.get_neuron_positions() if hasattr(self.tectum, 'get_neuron_positions') else np.array([])
+        
+        # ЭНЕРГЕТИЧЕСКАЯ ИНФОРМАЦИЯ: передаём уровень энергии (биологическая, 0-1 шкала)
+        self.glial_network.update(tectal_activity, tectum_positions, dt, energy_level=energy_level)
+        
+        # 8. МОДУЛЯЦИЯ СИНАПСОВ ГЛИЕЙ (если есть синапсы)
+        if len(self.synapses) > 0 and self.glial_network.average_gliotransmitter > 0:
+            for astrocyte in self.glial_network.astrocytes:
+                if astrocyte.gliotransmitter_release > 0:
+                    astrocyte.modulate_synapses(self.synapses, weight_modifier=0.05)
         
         # История
         self.activity_history.append(neural_activity)
@@ -363,7 +392,14 @@ class BioFrogAgent:
         )
         
         # Параметры охоты
+        # БИОЛОГИЧЕСКАЯ ЭНЕРГИЯ (модулирует поведение через глию)
         self.energy = 1.0
+        
+        # ИГРОВАЯ МЕХАНИКА ЭНЕРГИИ (для сравнения с ANN/SNN)
+        # Отдельная система, как в ANN/SNN агентах - для справедливого сравнения
+        self.game_energy = 30.0
+        self.max_game_energy = 30.0
+        
         self.caught_flies = 0
         self.steps = 0
         self.last_catch_time = 0
@@ -374,16 +410,20 @@ class BioFrogAgent:
         self.tongue_length = 0.0
         self.tongue_target = None
         self.attached_fly = None
-        # Настройки поимки: в режиме обучения лягушка не должна ловить слишком быстро
-        # Сделаем радиус попадания и вероятность ниже в режиме обучения (training_mode)
-        if training_mode or instinct_mode:
-            self.hit_radius = 25.0
-            self.success_prob = 0.25
+        # Настройки поимки: в режиме обучения лягушка имеет сбалансированные параметры
+        # Training mode: умеренные параметры для обучения, но реалистичные
+        # Normal/Instinct mode: высокие параметры для хорошей производительности
+        if training_mode:
+            self.hit_radius = 50.0   # Увеличено с 25.0 (более реалистично)
+            self.success_prob = 0.5  # Увеличено с 0.25 (50% шанс)
+        elif instinct_mode:
+            self.hit_radius = 70.0   # Между training и normal
+            self.success_prob = 0.65  # 65% шанс
         else:
             self.hit_radius = 80.0
             self.success_prob = 0.8
         # Кулдаун между поимками (шаги) чтобы лягушка не ловила каждую итерацию
-        self.catch_cooldown = 30
+        self.catch_cooldown = 20  # Уменьшено с 30 для большей частоты (но всё ещё реалистично)
     
     def detect_flies(self, flies: List[Any]) -> Tuple[List[Tuple[float, float, float]], List[Tuple[float, float]]]:
         """
@@ -452,23 +492,50 @@ class BioFrogAgent:
         reward = 0.0
         if self.attached_fly:
             reward = 1.0
-            self.energy = min(1.0, self.energy + 0.5)
+            self.energy = min(1.0, self.energy + 0.2)  # УМЕНЬШЕНО с 0.5: поимка восстанавливает только 20%
+            
+            # ИГРОВАЯ МЕХАНИКА: награда за поимку (+5 очков энергии, как в ANN/SNN)
+            self.game_energy = min(self.max_game_energy, self.game_energy + 5.0)
+            
             self.attached_fly = None
         
-        # Энергетические затраты
-        self.energy = max(0.0, self.energy - 0.0001 * dt)
+        # УДАЛЕНО: старый расход энергии (заменён на динамический в разделе 3)
+        
+        # Передать в мозг также информацию об ИГРОВОЙ ЭНЕРГИИ (как в ANN/SNN)
+        # Мозг должен видеть energy_ratio для модулирования поведения
+        game_energy_ratio = self.game_energy / self.max_game_energy
         
         brain_output = self.brain.update(
             visual_scene, 
             motion_vectors,
             reward=reward,
+            energy_level=self.energy,  # Биологическая энергия для глии
+            game_energy_ratio=game_energy_ratio,  # Игровая энергия для поведения (как в ANN/SNN)
             dt=dt
         )
         
         # 3. МОТОРНОЕ ДЕЙСТВИЕ
         velocity = brain_output['velocity']
-        if np.linalg.norm(velocity) > 0:
-            self.body.velocity = to_pymunk_vec(velocity * 100)
+        velocity = np.array(velocity)  # Конвертируем в np.array для математических операций
+        
+        # МОДУЛЯЦИЯ НА ОСНОВЕ ЭНЕРГИИ: низкая энергия = медленнее движение
+        energy_factor = max(0.3, self.energy)  # Min 30% скорости при energy=0
+        velocity_modulated = velocity * energy_factor
+        
+        if np.linalg.norm(velocity_modulated) > 0:
+            self.body.velocity = to_pymunk_vec(velocity_modulated * 100)
+        
+        # Расход энергии пропорционален интенсивности движения (УВЕЛИЧЕНО в 10 раз)
+        movement_intensity = np.linalg.norm(velocity)
+        energy_cost = 0.005 * dt * (1.0 + movement_intensity)  # Увеличено с 0.0005
+        self.energy = max(0.0, self.energy - energy_cost)
+        
+        # ИГРОВАЯ МЕХАНИКА: затрата энергии за движение (как в ANN, но без зависимости от скорости)
+        # ANN использует: 0.08 + 0.02*velocity*dt
+        # для fair comparison используем последнюю скорость (как они делают)
+        last_velocity_norm = np.linalg.norm(velocity)
+        game_energy_cost = (0.08 + 0.02 * last_velocity_norm) * dt
+        self.game_energy = max(0.0, self.game_energy - game_energy_cost)
         
         # 4. ЯЗЫК
         if not self.tongue_extended and len(motion_vectors) > 0:
@@ -488,6 +555,11 @@ class BioFrogAgent:
                 direction = direction / distance
             
             self.tongue_length += 300.0 * dt
+            
+            # Расход энергии при активном использовании языка (охота ОЧЕНЬ дорогая!)
+            hunting_energy_cost = 0.2 * dt  # Еще дороже: теперь 0.2 энергии/сек
+            self.energy = max(0.0, self.energy - hunting_energy_cost)
+            
             if self.tongue_length >= 150.0 or distance < self.tongue_length:
                 self.retract_tongue()
             
@@ -500,16 +572,28 @@ class BioFrogAgent:
                     distance_to_fly = np.linalg.norm(fly_pos - tongue_end)
                     
                     if distance_to_fly < self.hit_radius:
-                        if random.random() < self.success_prob:
+                        # МОДУЛЯЦИЯ НА ОСНОВЕ ЭНЕРГИИ: низкая энергия = хуже охота
+                        energy_success_modifier = max(0.3, self.energy)  # 30-100% успех в зависимости от энергии
+                        success_chance = self.success_prob * energy_success_modifier
+                        
+                        if random.random() < success_chance:
                             self.attached_fly = fly
                             self.caught_flies += 1
                             self.last_catch_time = self.steps
                             break
         
+        # БАЗОВАЯ РЕГЕНЕРАЦИЯ ЭНЕРГИИ (метаболизм в покое)
+        # Лягушка восстанавливает ~0.15 энергии в секунду в покое (0.0015 за timestep)
+        # Это позволяет ей восстановиться от истощения
+        resting_recovery = 0.0015 * dt
+        self.energy = min(1.0, self.energy + resting_recovery)
+        
         return {
             'position': self.position,
             'velocity': velocity,
             'energy': self.energy,
+            'game_energy': self.game_energy,
+            'game_energy_ratio': self.game_energy / self.max_game_energy,
             'caught_flies': self.caught_flies,
             'dopamine': brain_output['dopamine'],
             'serotonin': brain_output['serotonin'],

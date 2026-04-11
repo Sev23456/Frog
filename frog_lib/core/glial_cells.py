@@ -82,14 +82,22 @@ class Astrocyte:
 
 
 class GlialNetwork:
-    """Сеть глиальных клеток для масштабной модуляции мозга"""
+    """Сеть глиальных клеток для масштабной модуляции мозга
     
-    def __init__(self, num_astrocytes: int = 24, brain_size: Tuple[float, float] = (400.0, 400.0)):
+    ЭНЕРГЕТИЧЕСКИЙ ИНТЕГРАТОР: глия модулирует нейронную активность 
+    на основе уровня энергии/метаболизма!
+    """
+    
+    def __init__(self, num_astrocytes: int = 25, brain_size: Tuple[float, float] = (400.0, 400.0)):
         self.num_astrocytes = num_astrocytes
         self.brain_size = brain_size
         
-        # Создаём сетку астроцитов
+        # Создаём сетку астроцитов (используем perfect square для равномерной сетки)
         grid_size = int(np.sqrt(num_astrocytes))
+        # Корректируем num_astrocytes до ближайшего perfect square если нужно
+        if grid_size * grid_size != num_astrocytes:
+            grid_size = max(1, grid_size)
+            self.num_astrocytes = grid_size * grid_size
         self.astrocytes: List[Astrocyte] = []
         
         for i in range(grid_size):
@@ -101,10 +109,32 @@ class GlialNetwork:
         
         self.average_gliotransmitter = 0.0
         self.brain_state = "resting"  # "resting", "active", "excited"
+        
+        # ЭНЕРГЕТИЧЕСКИЙ КОМПОНЕНТ
+        self.energy_level = 1.0  # Текущий уровень энергии (0-1)
+        self.energy_cost_factor = 1.0  # Коэффициент метаболического стресса
+        self.excitability_modulation = 1.0  # Модуляция возбудимости (0.3-1.5 от energy_level)
     
     def update(self, neural_activity_map: np.ndarray, 
-               neural_positions: np.ndarray, dt: float):
-        """Обновить состояние всей глиальной сети"""
+               neural_positions: np.ndarray, dt: float, 
+               energy_level: float = 1.0):
+        """Обновить состояние всей глиальной сети
+        
+        Args:
+            neural_activity_map: Карта активности нейронов
+            neural_positions: Позиции нейронов
+            dt: Временной шаг
+            energy_level: Уровень энергии в организме (0-1) - ОТ МЕТАБОЛИЗМА!
+        """
+        # ЭНЕРГЕТИЧЕСКОЕ СОСТОЯНИЕ ГЛИИ
+        self.energy_level = energy_level
+        
+        # Глия менее активна при низкой энергии (энергетический стресс)
+        self.energy_cost_factor = max(0.3, energy_level)  # 30-100% активность
+        
+        # Модуляция возбудимости: при низкой энергии нейроны менее возбудимы
+        self.excitability_modulation = 0.5 + 0.5 * energy_level  # 0.5-1.0
+        
         # Обновить каждый астроцит
         for astrocyte in self.astrocytes:
             astrocyte.respond_to_neural_activity(neural_activity_map, neural_positions, dt)
@@ -112,21 +142,32 @@ class GlialNetwork:
         # Вычислить среднее состояние сети
         self.average_gliotransmitter = np.mean([a.gliotransmitter_release for a in self.astrocytes])
         
-        # Определить состояние мозга
-        if self.average_gliotransmitter > 0.5:
+        # ЭНЕРГЕТИЧЕСКИЙ КОНТРОЛЬ: низкая энергия = ниже глиотрансмиттеров
+        # При низкой энергии глия выпускает МЕНЬШЕ глиотрансмиттеров
+        self.average_gliotransmitter *= self.energy_cost_factor
+        
+        # Определить состояние мозга с учётом энергии
+        if self.average_gliotransmitter > 0.5 and energy_level > 0.5:
             self.brain_state = "excited"
-        elif self.average_gliotransmitter > 0.2:
+        elif self.average_gliotransmitter > 0.2 and energy_level > 0.3:
             self.brain_state = "active"
         else:
             self.brain_state = "resting"
     
     def get_local_modulation(self, position: np.ndarray) -> Dict[str, float]:
-        """Получить локальную модуляцию в конкретной позиции"""
+        """Получить локальную модуляцию в конкретной позиции
+        
+        Возвращает коэффициенты модуляции нейромодуляторов.
+        При низкой энергии глия снижает нейромодуляторы.
+        """
         modulation = {
             'dopamine': 0.5,
             'serotonin': 0.5,
             'acetylcholine': 0.3
         }
+        
+        # ЭНЕРГЕТИЧЕСКАЯ МОДУЛЯЦИЯ: низкая энергия = ниже дофамин/серотонин
+        energy_factor = self.energy_cost_factor  # 0.3-1.0
         
         # Астроциты могут локально влиять на нейромодуляторы
         for astrocyte in self.astrocytes:
@@ -135,7 +176,20 @@ class GlialNetwork:
                 influence = (1.0 - distance / astrocyte.influence_radius) * astrocyte.gliotransmitter_release
                 modulation['acetylcholine'] += influence * 0.1
         
+        # Применить энергетический фактор ко ВСЕМ нейромодуляторам
+        modulation['dopamine'] *= energy_factor
+        modulation['serotonin'] *= energy_factor
+        modulation['acetylcholine'] *= energy_factor
+        
         return modulation
+    
+    def get_excitability_modulation(self) -> float:
+        """Получить коэффициент модуляции возбудимости нейронов на основе энергии
+        
+        Returns:
+            Коэффициент 0.5-1.0 (при низкой энергии нейроны менее возбудимы)
+        """
+        return self.excitability_modulation
     
     def reset(self):
         """Сброс всей сети"""
