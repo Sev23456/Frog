@@ -1,0 +1,59 @@
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+htmlcov/
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.ENV
+.envrc
+ENVIRONMENT
+
+# Build and distribution artifacts
+build/
+dist/
+*.egg
+*.egg-info/
+*.dist-info/
+.installed.cfg
+*.egg-info/
+
+# Dependencies
+pip-wheel-metadata/
+requirements.txt.bak
+requirements-local.txt
+requirements-dev.txt
+Pipfile.lock
+poetry.lock
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+```
