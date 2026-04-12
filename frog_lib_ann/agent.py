@@ -107,10 +107,15 @@ class FrogANNAgent:
         self.position = np.array(position, dtype=float)
         self.training_mode = training_mode
 
-        moment = pymunk.moment_for_circle(1.0, 0, 30.0)
+        # Parameters aligned with BioFrog for fair comparison
+        self.radius = 9.0
+        self.max_speed = 65.0
+        self.visual_range = 40.0  # Same as BioFrog VISION_RADIUS_PX
+        
+        moment = pymunk.moment_for_circle(1.0, 0, self.radius)
         self.body = pymunk.Body(1.0, moment)
         self.body.position = tuple(self.position)
-        self.shape = pymunk.Circle(self.body, 30.0)
+        self.shape = pymunk.Circle(self.body, self.radius)
         self.shape.elasticity = 0.8
         self.shape.friction = 0.7
         self.space.add(self.body, self.shape)
@@ -121,13 +126,12 @@ class FrogANNAgent:
 
         self.max_energy = 30.0
         self.energy = float(self.max_energy)
-        self.visual_range = 220.0
         self.caught_flies = 0
         self.steps = 0
         self.last_catch_time = 0
         self.catch_cooldown = 20
 
-        self.hit_radius = 24.0 if training_mode else 34.0
+        self.hit_radius = 9.0 if training_mode else 12.0
         self.success_prob = 0.75 if training_mode else 0.92
 
         self.tongue_extended = False
@@ -226,7 +230,8 @@ class FrogANNAgent:
         if speed > 1.0:
             velocity = velocity / speed
 
-        self.body.velocity = to_pymunk_vec(velocity * 115.0)
+        # Use max_speed instead of hardcoded 115.0 for fair comparison
+        self.body.velocity = to_pymunk_vec(velocity * self.max_speed)
         self.last_velocity = velocity
 
         if not self.tongue_extended and motion_vectors:
