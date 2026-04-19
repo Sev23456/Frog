@@ -7,11 +7,15 @@ import argparse
 import csv
 import gzip
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    import matplotlib
+    matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 except Exception:  # pragma: no cover - plotting is optional
     plt = None
@@ -19,8 +23,11 @@ except Exception:  # pragma: no cover - plotting is optional
 
 ARCH_COLORS = {
     "ANN": "#2f80ed",
+    "ANN_FROZEN": "#7fb3ff",
     "SNN": "#27ae60",
+    "SNN_FROZEN": "#7bd8a3",
     "BIO": "#e67e22",
+    "BIO_DUAL": "#b85c11",
 }
 
 
@@ -71,6 +78,25 @@ def build_mode_table(rows: Sequence[Dict[str, str]], mode: str) -> List[Dict[str
                 "Flies / energy": metric_cell(as_float(row.get("flies_per_energy_spent_mean")), as_float(row.get("flies_per_energy_spent_std"))),
                 "Move eff. px/catch": metric_cell(as_float(row.get("movement_efficiency_px_per_catch_mean")), as_float(row.get("movement_efficiency_px_per_catch_std"))),
                 "ms / step": metric_cell(as_float(row.get("ms_per_step_mean")), as_float(row.get("ms_per_step_std")), precision=4),
+            }
+        )
+    return table
+
+
+def build_state_dependence_table(rows: Sequence[Dict[str, str]], mode: str) -> List[Dict[str, str]]:
+    selected = [row for row in rows if row.get("mode") == mode]
+    selected.sort(key=lambda item: item.get("arch", ""))
+    table: List[Dict[str, str]] = []
+    for row in selected:
+        table.append(
+            {
+                "Architecture": row["arch"],
+                "Catch rate low E": metric_cell(as_float(row.get("catch_rate_low_energy_mean")), as_float(row.get("catch_rate_low_energy_std"))),
+                "Catch rate high E": metric_cell(as_float(row.get("catch_rate_high_energy_mean")), as_float(row.get("catch_rate_high_energy_std"))),
+                "Strike rate low E": metric_cell(as_float(row.get("strike_rate_low_energy_mean")), as_float(row.get("strike_rate_low_energy_std"))),
+                "Strike rate high E": metric_cell(as_float(row.get("strike_rate_high_energy_mean")), as_float(row.get("strike_rate_high_energy_std"))),
+                "Ignored visible high E": metric_cell(as_float(row.get("visible_but_ignored_ratio_high_energy_mean")), as_float(row.get("visible_but_ignored_ratio_high_energy_std"))),
+                "E deficit vs strike r": metric_cell(as_float(row.get("energy_deficit_strike_correlation_mean")), as_float(row.get("energy_deficit_strike_correlation_std"))),
             }
         )
     return table
@@ -243,6 +269,8 @@ def generate_report(output_dir: Path) -> Path:
 
     adult_table = build_mode_table(aggregate_rows, "adult")
     developmental_table = build_mode_table(aggregate_rows, "developmental")
+    adult_state_table = build_state_dependence_table(aggregate_rows, "adult")
+    developmental_state_table = build_state_dependence_table(aggregate_rows, "developmental")
     adult_winners = determine_winners(aggregate_rows, "adult")
     developmental_winners = determine_winners(aggregate_rows, "developmental")
 
@@ -257,7 +285,7 @@ def generate_report(output_dir: Path) -> Path:
         f"- Spawn seeds: {len(metadata['spawn_seeds'])}\n"
         f"- Repeats per seed: {metadata['repeats']}\n"
         f"- Steps per run: {metadata['steps']}\n"
-        f"- Online learning: enabled for all variants\n"
+        f"- Online learning: enabled for current variants; frozen variants disable online updates\n"
         f"- Competence proxy: {metadata['competence_catches']} catches"
     )
     lines.append("")
@@ -273,6 +301,10 @@ def generate_report(output_dir: Path) -> Path:
         f"compute `{adult_winners.get('compute', 'n/a')}`."
     )
     lines.append("")
+    lines.append("### Adult State Dependence")
+    lines.append("")
+    lines.append(markdown_table(adult_state_table))
+    lines.append("")
     lines.append("## Developmental Mode Summary")
     lines.append("")
     lines.append(markdown_table(developmental_table))
@@ -285,11 +317,17 @@ def generate_report(output_dir: Path) -> Path:
         f"compute `{developmental_winners.get('compute', 'n/a')}`."
     )
     lines.append("")
+    lines.append("### Developmental State Dependence")
+    lines.append("")
+    lines.append(markdown_table(developmental_state_table))
+    lines.append("")
     lines.append("## Notes")
     lines.append("")
     lines.append("- `adult` corresponds to `training_mode=False`; `developmental` corresponds to `training_mode=True`.")
     lines.append("- Spawn seeds control the fly spawn stream; repeats keep the spawn stream but vary runtime randomness.")
-    lines.append("- ANN and SNN developmental modes are lighter-weight than BIO developmental mode, so those rows should be interpreted as `training-like juvenile conditions`, not as fully symmetric ontogeny.")
+    lines.append("- `ANN_FROZEN` and `SNN_FROZEN` keep the same architectures and sensors but disable online weight updates during the run.")
+    lines.append("- `BIO_DUAL` is a copied descendant of the current BIO runtime with an internal slow-vs-fast prey-capture split, not an external controller.")
+    lines.append("- ANN and SNN developmental modes are lighter-weight than BIO/BIO_DUAL developmental mode, so those rows should be interpreted as `training-like juvenile conditions`, not as fully symmetric ontogeny.")
     lines.append("- Metrics not tied to the fixed benchmark protocol, such as retention after a pause or robustness to environmental perturbations, were intentionally left out of this report.")
     lines.append("")
     lines.append("## Artifacts")

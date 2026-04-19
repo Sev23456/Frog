@@ -30,11 +30,14 @@ except Exception:  # pragma: no cover - torch is optional
     torch = None
 
 from frog_lib_ann.simulation import ANNFlyCatchingSimulation
+from frog_lib_ann_frozen.simulation import ANNFlyCatchingSimulation as ANNFrozenSimulation
 from frog_lib_snn.simulation import SNNFlyCatchingSimulation
+from frog_lib_snn_frozen.simulation import SNNFlyCatchingSimulation as SNNFrozenSimulation
 from Frog_predator_neuro.simulation import Simulation as BioSimulation
+from Frog_predator_neuro_dual.simulation import Simulation as BioDualSimulation
 
 
-ARCHITECTURES: Tuple[str, ...] = ("ANN", "SNN", "BIO")
+ARCHITECTURES: Tuple[str, ...] = ("ANN", "ANN_FROZEN", "SNN", "SNN_FROZEN", "BIO", "BIO_DUAL")
 MODES: Dict[str, bool] = {
     "adult": False,
     "developmental": True,
@@ -54,6 +57,8 @@ RUN_METRIC_FIELDS: List[str] = [
     "ms_per_step",
     "catches",
     "strike_attempts",
+    "successful_strike_episodes",
+    "captures_per_strike_attempt",
     "capture_success",
     "false_strike_rate",
     "catch_rate_per_1k_steps",
@@ -68,6 +73,12 @@ RUN_METRIC_FIELDS: List[str] = [
     "energy_initial",
     "energy_final",
     "energy_spent_est",
+    "catch_rate_low_energy",
+    "catch_rate_mid_energy",
+    "catch_rate_high_energy",
+    "strike_rate_low_energy",
+    "strike_rate_mid_energy",
+    "strike_rate_high_energy",
     "flies_per_energy_spent",
     "net_energy_balance_per_catch",
     "path_length_px",
@@ -81,6 +92,9 @@ RUN_METRIC_FIELDS: List[str] = [
     "tongue_usage_ratio",
     "visible_time_s",
     "visible_but_ignored_ratio",
+    "visible_but_ignored_ratio_low_energy",
+    "visible_but_ignored_ratio_high_energy",
+    "energy_deficit_strike_correlation",
     "strike_opportunity_count",
     "strike_opportunity_conversion",
     "shot_distance_mean_px",
@@ -104,6 +118,13 @@ RUN_METRIC_FIELDS: List[str] = [
     "avg_maturity_readiness",
     "avg_maturity_stability",
     "avg_food_prediction_error",
+    "avg_hunger_bias",
+    "avg_reward_seek_bias",
+    "avg_predation_bias",
+    "avg_prey_permission",
+    "avg_fast_target_lock",
+    "avg_fast_loop_gate",
+    "avg_fast_strike_drive",
     "avg_effective_motor_gate",
     "avg_bg_gating_signal",
     "avg_spike_rate",
@@ -127,6 +148,7 @@ TIME_SERIES_FIELDS: List[str] = [
     "catches",
     "catch_rate_per_minute",
     "energy",
+    "energy_ratio",
     "controller_signal",
     "neural_activity",
     "alignment",
@@ -149,6 +171,13 @@ TIME_SERIES_FIELDS: List[str] = [
     "actor_advantage",
     "value_estimate",
     "food_prediction_error",
+    "hunger_bias",
+    "reward_seek_bias",
+    "predation_bias",
+    "prey_permission",
+    "fast_target_lock",
+    "fast_loop_gate",
+    "fast_strike_drive",
     "bg_gating_signal",
     "effective_motor_gate",
 ]
@@ -189,12 +218,25 @@ SUMMARY_METRICS: Tuple[str, ...] = (
     "reaction_latency_mean_s",
     "ttc_mean_s",
     "compute_per_catch_s",
+    "catch_rate_low_energy",
+    "catch_rate_mid_energy",
+    "catch_rate_high_energy",
+    "strike_rate_low_energy",
+    "strike_rate_mid_energy",
+    "strike_rate_high_energy",
     "wall_clock_s",
     "adult_time_s",
     "avg_spike_rate",
     "avg_spike_count",
     "spikes_per_catch",
     "avg_food_prediction_error",
+    "avg_hunger_bias",
+    "avg_reward_seek_bias",
+    "avg_predation_bias",
+    "avg_prey_permission",
+    "avg_fast_target_lock",
+    "avg_fast_loop_gate",
+    "avg_fast_strike_drive",
     "avg_maturity_readiness",
     "avg_maturity_stability",
 )
@@ -226,28 +268,44 @@ def configure_numpy_and_torch(seed: int) -> None:
 
 
 def safe_mean(values: Sequence[float]) -> Optional[float]:
-    usable = [float(value) for value in values if value is not None and not math.isnan(float(value))]
+    usable = [
+        float(value)
+        for value in values
+        if value not in (None, "", "None") and not math.isnan(float(value))
+    ]
     if not usable:
         return None
     return float(statistics.fmean(usable))
 
 
 def safe_median(values: Sequence[float]) -> Optional[float]:
-    usable = [float(value) for value in values if value is not None and not math.isnan(float(value))]
+    usable = [
+        float(value)
+        for value in values
+        if value not in (None, "", "None") and not math.isnan(float(value))
+    ]
     if not usable:
         return None
     return float(statistics.median(usable))
 
 
 def safe_std(values: Sequence[float]) -> Optional[float]:
-    usable = [float(value) for value in values if value is not None and not math.isnan(float(value))]
+    usable = [
+        float(value)
+        for value in values
+        if value not in (None, "", "None") and not math.isnan(float(value))
+    ]
     if len(usable) < 2:
         return 0.0 if usable else None
     return float(statistics.pstdev(usable))
 
 
 def safe_quantile(values: Sequence[float], q: float) -> Optional[float]:
-    usable = sorted(float(value) for value in values if value is not None and not math.isnan(float(value)))
+    usable = sorted(
+        float(value)
+        for value in values
+        if value not in (None, "", "None") and not math.isnan(float(value))
+    )
     if not usable:
         return None
     if len(usable) == 1:
@@ -262,7 +320,11 @@ def safe_quantile(values: Sequence[float], q: float) -> Optional[float]:
 
 
 def confidence_interval_95(values: Sequence[float]) -> Optional[float]:
-    usable = [float(value) for value in values if value is not None and not math.isnan(float(value))]
+    usable = [
+        float(value)
+        for value in values
+        if value not in (None, "", "None") and not math.isnan(float(value))
+    ]
     if len(usable) < 2:
         return 0.0 if usable else None
     return float(1.96 * statistics.pstdev(usable) / math.sqrt(len(usable)))
@@ -272,19 +334,66 @@ def bool_to_float(value: bool) -> float:
     return 1.0 if value else 0.0
 
 
+def clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, float(value)))
+
+
+def safe_correlation(xs: Sequence[float], ys: Sequence[float]) -> Optional[float]:
+    usable: List[Tuple[float, float]] = []
+    for x, y in zip(xs, ys):
+        if x is None or y is None:
+            continue
+        x_value = float(x)
+        y_value = float(y)
+        if math.isnan(x_value) or math.isnan(y_value):
+            continue
+        usable.append((x_value, y_value))
+    if len(usable) < 2:
+        return None
+    x_values = np.array([pair[0] for pair in usable], dtype=float)
+    y_values = np.array([pair[1] for pair in usable], dtype=float)
+    if float(np.std(x_values)) <= 1e-9 or float(np.std(y_values)) <= 1e-9:
+        return None
+    return float(np.corrcoef(x_values, y_values)[0, 1])
+
+
+def energy_bucket_name(energy_ratio: float) -> str:
+    if energy_ratio < 0.40:
+        return "low"
+    if energy_ratio < 0.80:
+        return "mid"
+    return "high"
+
+
+def architecture_family(arch: str) -> str:
+    if arch in {"ANN", "ANN_FROZEN"}:
+        return "ANN"
+    if arch in {"SNN", "SNN_FROZEN"}:
+        return "SNN"
+    if arch in {"BIO", "BIO_DUAL"}:
+        return "BIO"
+    return arch
+
+
 def instantiate_simulation(arch: str, training_mode: bool, model_seed: int):
     configure_numpy_and_torch(model_seed)
     if arch == "ANN":
         return ANNFlyCatchingSimulation(headless=True, training_mode=training_mode)
+    if arch == "ANN_FROZEN":
+        return ANNFrozenSimulation(headless=True, training_mode=training_mode)
     if arch == "SNN":
         return SNNFlyCatchingSimulation(headless=True, training_mode=training_mode)
+    if arch == "SNN_FROZEN":
+        return SNNFrozenSimulation(headless=True, training_mode=training_mode)
     if arch == "BIO":
         return BioSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
+    if arch == "BIO_DUAL":
+        return BioDualSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
     raise ValueError(f"Unsupported architecture: {arch}")
 
 
 def primary_agent(sim: Any, arch: str) -> Any:
-    if arch in {"ANN", "SNN"}:
+    if arch in {"ANN", "ANN_FROZEN", "SNN", "SNN_FROZEN"}:
         return sim.frog
     return sim.frogs[0]
 
@@ -314,7 +423,7 @@ def catch_distance_for_agent(agent: Any) -> float:
 
 
 def step_simulation(sim: Any, arch: str) -> Dict[str, Any]:
-    if arch == "BIO":
+    if arch in {"BIO", "BIO_DUAL"}:
         result = sim.step()
         agents = result.get("agents", [])
         if agents:
@@ -420,7 +529,7 @@ def aggregate_seed_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
     training_mode = MODES[task.mode]
-    model_seed = stable_seed("model", task.arch)
+    model_seed = stable_seed("model", architecture_family(task.arch))
     runtime_seed = stable_seed("runtime", task.arch, task.mode, task.spawn_seed, task.repeat)
 
     random.seed(task.spawn_seed)
@@ -435,14 +544,21 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
     agent = primary_agent(sim, task.arch)
     dt = float(getattr(sim, "dt", 0.01))
     initial_energy = float(getattr(agent, "energy", 0.0))
+    max_energy = max(initial_energy, float(getattr(agent, "max_energy", initial_energy or 1.0)))
     catch_distance = catch_distance_for_agent(agent)
 
     catches = 0
     strike_attempts = 0
+    successful_strike_episodes = 0
     tongue_catches = 0
     visible_steps = 0
     ignored_visible_steps = 0
     strike_window_episodes = 0
+    bucket_seconds = {"low": 0.0, "mid": 0.0, "high": 0.0}
+    bucket_catches = {"low": 0, "mid": 0, "high": 0}
+    bucket_strikes = {"low": 0, "mid": 0, "high": 0}
+    bucket_visible_steps = {"low": 0, "mid": 0, "high": 0}
+    bucket_ignored_steps = {"low": 0, "mid": 0, "high": 0}
     first_catch_step: Optional[int] = None
     competence_step: Optional[int] = None
     adult_step: Optional[int] = None
@@ -451,6 +567,8 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
     strike_window_start_step: Optional[int] = None
     previous_tongue_extended = False
     previous_in_strike_window = False
+    strike_episode_active = False
+    strike_episode_succeeded = False
     previous_velocity = np.zeros(2, dtype=float)
     previous_acceleration = np.zeros(2, dtype=float)
 
@@ -477,6 +595,15 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
     learning_reward_samples: List[float] = []
     actor_advantage_samples: List[float] = []
     value_estimate_samples: List[float] = []
+    hunger_bias_samples: List[float] = []
+    reward_seek_bias_samples: List[float] = []
+    predation_bias_samples: List[float] = []
+    prey_permission_samples: List[float] = []
+    fast_target_lock_samples: List[float] = []
+    fast_loop_gate_samples: List[float] = []
+    fast_strike_drive_samples: List[float] = []
+    energy_deficit_samples: List[float] = []
+    strike_propensity_samples: List[float] = []
     burst_steps = 0
     silent_steps = 0
 
@@ -504,11 +631,17 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
             target_distance_raw = state.get("target_distance")
             target_distance = float(target_distance_raw) if target_distance_raw is not None else math.nan
             visible_target_count = int(state.get("visible_target_count", 0) or 0)
+            current_energy = float(state.get("energy", 0.0))
+            energy_ratio = clamp(current_energy / max(max_energy, 1e-9), 0.0, 1.2)
+            energy_bucket = energy_bucket_name(energy_ratio)
+            bucket_seconds[energy_bucket] += dt
             visibility = 1.0 if (visible_target_count > 0 or target_distance_raw is not None or state.get("visibility", 0.0) > 0.0) else 0.0
             if visibility > 0.0:
                 visible_steps += 1
+                bucket_visible_steps[energy_bucket] += 1
             if visibility > 0.0 and float(state.get("controller_signal", 0.0)) < 0.15 and not bool(state.get("tongue_extended", False)) and float(state.get("strike_drive", 0.0)) < 0.35:
                 ignored_visible_steps += 1
+                bucket_ignored_steps[energy_bucket] += 1
 
             if visibility > 0.0 and detection_start_step is None:
                 detection_start_step = step
@@ -545,9 +678,13 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
             previous_in_strike_window = in_strike_window
 
             tongue_extended = bool(state.get("tongue_extended", False))
-            strike_attempt = tongue_extended and not previous_tongue_extended
+            caught = state.get("caught_fly") is not None
+            strike_attempt = (tongue_extended and not previous_tongue_extended) or (caught and not previous_tongue_extended)
             if strike_attempt:
                 strike_attempts += 1
+                strike_episode_active = True
+                strike_episode_succeeded = False
+                bucket_strikes[energy_bucket] += 1
                 if not math.isnan(target_distance):
                     shot_distances.append(target_distance)
                     positioning_errors.append(max(0.0, target_distance - catch_distance))
@@ -575,9 +712,12 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
                 )
                 strike_window_start_step = None
 
-            caught = state.get("caught_fly") is not None
             if caught:
                 catches += 1
+                bucket_catches[energy_bucket] += 1
+                if strike_episode_active and not strike_episode_succeeded:
+                    successful_strike_episodes += 1
+                    strike_episode_succeeded = True
                 if first_catch_step is None:
                     first_catch_step = step
                 if competence_step is None and catches >= task.competence_catches:
@@ -644,6 +784,30 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
             food_prediction_error_samples.append(float(state.get("food_prediction_error", 0.0)))
             effective_motor_gate_samples.append(float(state.get("effective_motor_gate", 0.0)))
             bg_gating_signal_samples.append(float(state.get("bg_gating_signal", 0.0)))
+            motivation_context = dict(state.get("motivation_context", {}) or {})
+            hunger_bias = motivation_context.get("hunger_bias")
+            reward_seek_bias = motivation_context.get("reward_seek_bias")
+            predation_bias = motivation_context.get("predation_bias")
+            if hunger_bias is not None:
+                hunger_bias_samples.append(float(hunger_bias))
+            if reward_seek_bias is not None:
+                reward_seek_bias_samples.append(float(reward_seek_bias))
+            if predation_bias is not None:
+                predation_bias_samples.append(float(predation_bias))
+            prey_permission = state.get("prey_permission")
+            fast_target_lock = state.get("fast_target_lock")
+            fast_loop_gate = state.get("fast_loop_gate")
+            fast_strike_drive = state.get("fast_strike_drive")
+            if prey_permission is not None:
+                prey_permission_samples.append(float(prey_permission))
+            if fast_target_lock is not None:
+                fast_target_lock_samples.append(float(fast_target_lock))
+            if fast_loop_gate is not None:
+                fast_loop_gate_samples.append(float(fast_loop_gate))
+            if fast_strike_drive is not None:
+                fast_strike_drive_samples.append(float(fast_strike_drive))
+            energy_deficit_samples.append(clamp(1.0 - energy_ratio, 0.0, 1.0))
+            strike_propensity_samples.append(1.0 if strike_attempt else 0.0)
 
             spike_count_value = state.get("spike_count")
             if spike_count_value is not None:
@@ -677,7 +841,8 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
                         "time_s": current_time_s,
                         "catches": catches,
                         "catch_rate_per_minute": catches / max(current_time_s / 60.0, 1e-9),
-                        "energy": float(state.get("energy", 0.0)),
+                        "energy": current_energy,
+                        "energy_ratio": energy_ratio,
                         "controller_signal": float(state.get("controller_signal", 0.0)),
                         "neural_activity": float(state.get("neural_activity", 0.0)),
                         "alignment": float(state.get("alignment", 0.0)),
@@ -700,11 +865,21 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
                         "actor_advantage": actor_advantage,
                         "value_estimate": value_estimate,
                         "food_prediction_error": state.get("food_prediction_error"),
+                        "hunger_bias": hunger_bias,
+                        "reward_seek_bias": reward_seek_bias,
+                        "predation_bias": predation_bias,
+                        "prey_permission": prey_permission,
+                        "fast_target_lock": fast_target_lock,
+                        "fast_loop_gate": fast_loop_gate,
+                        "fast_strike_drive": fast_strike_drive,
                         "bg_gating_signal": state.get("bg_gating_signal"),
                         "effective_motor_gate": state.get("effective_motor_gate"),
                     }
                 )
 
+            if strike_episode_active and not tongue_extended and previous_tongue_extended:
+                strike_episode_active = False
+                strike_episode_succeeded = False
             previous_tongue_extended = tongue_extended
 
         wall_clock_s = time.perf_counter() - start_wall_clock
@@ -739,8 +914,10 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
         "ms_per_step": ms_per_step,
         "catches": catches,
         "strike_attempts": strike_attempts,
-        "capture_success": catches_float / strike_attempts if strike_attempts > 0 else 0.0,
-        "false_strike_rate": max(0.0, strike_attempts - catches_float) / strike_attempts if strike_attempts > 0 else 0.0,
+        "successful_strike_episodes": successful_strike_episodes,
+        "captures_per_strike_attempt": catches_float / strike_attempts if strike_attempts > 0 else 0.0,
+        "capture_success": successful_strike_episodes / strike_attempts if strike_attempts > 0 else 0.0,
+        "false_strike_rate": max(0.0, strike_attempts - successful_strike_episodes) / strike_attempts if strike_attempts > 0 else 0.0,
         "catch_rate_per_1k_steps": catches_float / max(task.steps / 1000.0, 1e-9),
         "catch_rate_per_minute": catches_float / max(sim_time_s / 60.0, 1e-9),
         "time_to_first_catch_s": first_catch_step * dt if first_catch_step is not None else None,
@@ -753,6 +930,12 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
         "energy_initial": initial_energy,
         "energy_final": final_energy,
         "energy_spent_est": energy_spent_est,
+        "catch_rate_low_energy": bucket_catches["low"] / max(bucket_seconds["low"] / 60.0, 1e-9) if bucket_seconds["low"] > 0 else None,
+        "catch_rate_mid_energy": bucket_catches["mid"] / max(bucket_seconds["mid"] / 60.0, 1e-9) if bucket_seconds["mid"] > 0 else None,
+        "catch_rate_high_energy": bucket_catches["high"] / max(bucket_seconds["high"] / 60.0, 1e-9) if bucket_seconds["high"] > 0 else None,
+        "strike_rate_low_energy": bucket_strikes["low"] / max(bucket_seconds["low"] / 60.0, 1e-9) if bucket_seconds["low"] > 0 else None,
+        "strike_rate_mid_energy": bucket_strikes["mid"] / max(bucket_seconds["mid"] / 60.0, 1e-9) if bucket_seconds["mid"] > 0 else None,
+        "strike_rate_high_energy": bucket_strikes["high"] / max(bucket_seconds["high"] / 60.0, 1e-9) if bucket_seconds["high"] > 0 else None,
         "flies_per_energy_spent": catches_float / energy_spent_est if energy_spent_est > 0 else None,
         "net_energy_balance_per_catch": (final_energy - initial_energy) / catches_float if catches > 0 else None,
         "path_length_px": path_length,
@@ -766,6 +949,9 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
         "tongue_usage_ratio": tongue_catches / catches_float if catches > 0 else None,
         "visible_time_s": visible_steps * dt,
         "visible_but_ignored_ratio": ignored_visible_steps / visible_steps if visible_steps > 0 else None,
+        "visible_but_ignored_ratio_low_energy": bucket_ignored_steps["low"] / bucket_visible_steps["low"] if bucket_visible_steps["low"] > 0 else None,
+        "visible_but_ignored_ratio_high_energy": bucket_ignored_steps["high"] / bucket_visible_steps["high"] if bucket_visible_steps["high"] > 0 else None,
+        "energy_deficit_strike_correlation": safe_correlation(energy_deficit_samples, strike_propensity_samples),
         "strike_opportunity_count": strike_window_episodes,
         "strike_opportunity_conversion": catches_float / strike_window_episodes if strike_window_episodes > 0 else None,
         "shot_distance_mean_px": safe_mean(shot_distances),
@@ -789,6 +975,13 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
         "avg_maturity_readiness": safe_mean(maturity_readiness_samples),
         "avg_maturity_stability": safe_mean(maturity_stability_samples),
         "avg_food_prediction_error": safe_mean(food_prediction_error_samples),
+        "avg_hunger_bias": safe_mean(hunger_bias_samples),
+        "avg_reward_seek_bias": safe_mean(reward_seek_bias_samples),
+        "avg_predation_bias": safe_mean(predation_bias_samples),
+        "avg_prey_permission": safe_mean(prey_permission_samples),
+        "avg_fast_target_lock": safe_mean(fast_target_lock_samples),
+        "avg_fast_loop_gate": safe_mean(fast_loop_gate_samples),
+        "avg_fast_strike_drive": safe_mean(fast_strike_drive_samples),
         "avg_effective_motor_gate": safe_mean(effective_motor_gate_samples),
         "avg_bg_gating_signal": safe_mean(bg_gating_signal_samples),
         "avg_spike_rate": safe_mean(spike_rate_samples),
@@ -828,6 +1021,7 @@ def run_benchmark_suite(
     steps: int = 100_000,
     spawn_seeds: Sequence[int] = tuple(range(10)),
     repeats: int = 5,
+    repeat_indices: Optional[Sequence[int]] = None,
     modes: Sequence[str] = ("adult", "developmental"),
     architectures: Sequence[str] = ARCHITECTURES,
     sample_interval: int = 200,
@@ -836,6 +1030,7 @@ def run_benchmark_suite(
     workers: int = 1,
 ) -> Path:
     output_dir = make_output_dir(output_dir)
+    selected_repeats = tuple(int(repeat) for repeat in repeat_indices) if repeat_indices is not None else tuple(range(repeats))
     tasks: List[BenchmarkTask] = [
         BenchmarkTask(
             arch=arch,
@@ -849,7 +1044,7 @@ def run_benchmark_suite(
         for mode in modes
         for arch in architectures
         for spawn_seed in spawn_seeds
-        for repeat in range(repeats)
+        for repeat in selected_repeats
     ]
 
     run_metrics: List[Dict[str, Any]] = []
@@ -860,6 +1055,7 @@ def run_benchmark_suite(
         "steps": steps,
         "spawn_seeds": list(spawn_seeds),
         "repeats": repeats,
+        "repeat_indices": list(selected_repeats),
         "modes": list(modes),
         "architectures": list(architectures),
         "sample_interval": sample_interval,
@@ -868,7 +1064,9 @@ def run_benchmark_suite(
         "created_at": datetime.now().isoformat(),
         "notes": [
             "spawn_seed controls initial fly spawn stream; runtime randomness varies per repeat",
-            "online learning remains enabled for all architectures",
+            "online learning remains enabled for ANN/SNN/BIO current variants",
+            "ANN_FROZEN and SNN_FROZEN preserve architecture but disable online weight updates",
+            "BIO_DUAL is a copied dual-loop descendant of the current BIO runtime",
             "developmental mode maps to training_mode=True",
         ],
     }
@@ -876,7 +1074,7 @@ def run_benchmark_suite(
 
     print(
         f"Benchmark start | runs={len(tasks)} | steps={steps} | seeds={len(spawn_seeds)} | "
-        f"repeats={repeats} | workers={workers}"
+        f"repeats={len(selected_repeats)} | workers={workers}"
     )
 
     completed = 0
@@ -941,7 +1139,21 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Long-form benchmark for ANN, SNN and BIO frog variants.")
     parser.add_argument("--steps", type=int, default=100_000, help="Simulation steps per run.")
     parser.add_argument("--seeds", type=int, default=10, help="Number of spawn seeds starting from 0.")
+    parser.add_argument(
+        "--spawn-seeds",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Explicit spawn seed list. If provided, overrides --seeds.",
+    )
     parser.add_argument("--repeats", type=int, default=5, help="Repeats per spawn seed.")
+    parser.add_argument(
+        "--repeat-indices",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Explicit repeat indices. If provided, overrides the repeat range implied by --repeats.",
+    )
     parser.add_argument(
         "--modes",
         nargs="+",
@@ -966,10 +1178,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    spawn_seeds = tuple(int(seed) for seed in args.spawn_seeds) if args.spawn_seeds is not None else tuple(range(args.seeds))
+    repeat_indices = tuple(int(repeat) for repeat in args.repeat_indices) if args.repeat_indices is not None else None
     output_dir = run_benchmark_suite(
         steps=args.steps,
-        spawn_seeds=tuple(range(args.seeds)),
+        spawn_seeds=spawn_seeds,
         repeats=args.repeats,
+        repeat_indices=repeat_indices,
         modes=tuple(args.modes),
         architectures=tuple(args.architectures),
         sample_interval=args.sample_interval,
