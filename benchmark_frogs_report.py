@@ -27,7 +27,13 @@ ARCH_COLORS = {
     "SNN": "#27ae60",
     "SNN_FROZEN": "#7bd8a3",
     "BIO": "#e67e22",
+    "BIO_COMPARE": "#ff9b3d",
     "BIO_DUAL": "#b85c11",
+    "BIO_DUAL_COMPARE": "#cf7b2f",
+    "BIO_FAST": "#f2a65a",
+    "BIO_FAST_COMPARE": "#ffd08c",
+    "BIO_DUAL_FAST": "#7d3c08",
+    "BIO_DUAL_FAST_COMPARE": "#a75a1c",
 }
 
 
@@ -327,6 +333,7 @@ def generate_report(output_dir: Path) -> Path:
     lines.append("- Spawn seeds control the fly spawn stream; repeats keep the spawn stream but vary runtime randomness.")
     lines.append("- `ANN_FROZEN` and `SNN_FROZEN` keep the same architectures and sensors but disable online weight updates during the run.")
     lines.append("- `BIO_DUAL` is a copied descendant of the current BIO runtime with an internal slow-vs-fast prey-capture split, not an external controller.")
+    lines.append("- `*_COMPARE` variants keep the same bio runtime but add a benchmark task-set floor to prey motivation, so satiety modulates hunting less aggressively and cross-architecture comparisons are fairer.")
     lines.append("- ANN and SNN developmental modes are lighter-weight than BIO/BIO_DUAL developmental mode, so those rows should be interpreted as `training-like juvenile conditions`, not as fully symmetric ontogeny.")
     lines.append("- Metrics not tied to the fixed benchmark protocol, such as retention after a pause or robustness to environmental perturbations, were intentionally left out of this report.")
     lines.append("")

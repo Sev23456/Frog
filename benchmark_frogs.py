@@ -34,10 +34,29 @@ from frog_lib_ann_frozen.simulation import ANNFlyCatchingSimulation as ANNFrozen
 from frog_lib_snn.simulation import SNNFlyCatchingSimulation
 from frog_lib_snn_frozen.simulation import SNNFlyCatchingSimulation as SNNFrozenSimulation
 from Frog_predator_neuro.simulation import Simulation as BioSimulation
+from Frog_predator_neuro_compare.simulation import Simulation as BioCompareSimulation
 from Frog_predator_neuro_dual.simulation import Simulation as BioDualSimulation
+from Frog_predator_neuro_dual_compare.simulation import Simulation as BioDualCompareSimulation
+from Frog_predator_neuro_fast.simulation import Simulation as BioFastSimulation
+from Frog_predator_neuro_fast_compare.simulation import Simulation as BioFastCompareSimulation
+from Frog_predator_neuro_dual_fast.simulation import Simulation as BioDualFastSimulation
+from Frog_predator_neuro_dual_fast_compare.simulation import Simulation as BioDualFastCompareSimulation
 
 
-ARCHITECTURES: Tuple[str, ...] = ("ANN", "ANN_FROZEN", "SNN", "SNN_FROZEN", "BIO", "BIO_DUAL")
+ARCHITECTURES: Tuple[str, ...] = (
+    "ANN",
+    "ANN_FROZEN",
+    "SNN",
+    "SNN_FROZEN",
+    "BIO",
+    "BIO_COMPARE",
+    "BIO_DUAL",
+    "BIO_DUAL_COMPARE",
+    "BIO_FAST",
+    "BIO_FAST_COMPARE",
+    "BIO_DUAL_FAST",
+    "BIO_DUAL_FAST_COMPARE",
+)
 MODES: Dict[str, bool] = {
     "adult": False,
     "developmental": True,
@@ -121,6 +140,7 @@ RUN_METRIC_FIELDS: List[str] = [
     "avg_hunger_bias",
     "avg_reward_seek_bias",
     "avg_predation_bias",
+    "avg_task_set_bias",
     "avg_prey_permission",
     "avg_fast_target_lock",
     "avg_fast_loop_gate",
@@ -174,6 +194,7 @@ TIME_SERIES_FIELDS: List[str] = [
     "hunger_bias",
     "reward_seek_bias",
     "predation_bias",
+    "task_set_bias",
     "prey_permission",
     "fast_target_lock",
     "fast_loop_gate",
@@ -233,6 +254,7 @@ SUMMARY_METRICS: Tuple[str, ...] = (
     "avg_hunger_bias",
     "avg_reward_seek_bias",
     "avg_predation_bias",
+    "avg_task_set_bias",
     "avg_prey_permission",
     "avg_fast_target_lock",
     "avg_fast_loop_gate",
@@ -370,7 +392,16 @@ def architecture_family(arch: str) -> str:
         return "ANN"
     if arch in {"SNN", "SNN_FROZEN"}:
         return "SNN"
-    if arch in {"BIO", "BIO_DUAL"}:
+    if arch in {
+        "BIO",
+        "BIO_COMPARE",
+        "BIO_DUAL",
+        "BIO_DUAL_COMPARE",
+        "BIO_FAST",
+        "BIO_FAST_COMPARE",
+        "BIO_DUAL_FAST",
+        "BIO_DUAL_FAST_COMPARE",
+    }:
         return "BIO"
     return arch
 
@@ -387,8 +418,20 @@ def instantiate_simulation(arch: str, training_mode: bool, model_seed: int):
         return SNNFrozenSimulation(headless=True, training_mode=training_mode)
     if arch == "BIO":
         return BioSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
+    if arch == "BIO_COMPARE":
+        return BioCompareSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
     if arch == "BIO_DUAL":
         return BioDualSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
+    if arch == "BIO_DUAL_COMPARE":
+        return BioDualCompareSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
+    if arch == "BIO_FAST":
+        return BioFastSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
+    if arch == "BIO_FAST_COMPARE":
+        return BioFastCompareSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
+    if arch == "BIO_DUAL_FAST":
+        return BioDualFastSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
+    if arch == "BIO_DUAL_FAST_COMPARE":
+        return BioDualFastCompareSimulation(headless=True, training_mode=training_mode, brain_seed=model_seed)
     raise ValueError(f"Unsupported architecture: {arch}")
 
 
@@ -423,7 +466,16 @@ def catch_distance_for_agent(agent: Any) -> float:
 
 
 def step_simulation(sim: Any, arch: str) -> Dict[str, Any]:
-    if arch in {"BIO", "BIO_DUAL"}:
+    if arch in {
+        "BIO",
+        "BIO_COMPARE",
+        "BIO_DUAL",
+        "BIO_DUAL_COMPARE",
+        "BIO_FAST",
+        "BIO_FAST_COMPARE",
+        "BIO_DUAL_FAST",
+        "BIO_DUAL_FAST_COMPARE",
+    }:
         result = sim.step()
         agents = result.get("agents", [])
         if agents:
@@ -598,6 +650,7 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
     hunger_bias_samples: List[float] = []
     reward_seek_bias_samples: List[float] = []
     predation_bias_samples: List[float] = []
+    task_set_bias_samples: List[float] = []
     prey_permission_samples: List[float] = []
     fast_target_lock_samples: List[float] = []
     fast_loop_gate_samples: List[float] = []
@@ -788,12 +841,15 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
             hunger_bias = motivation_context.get("hunger_bias")
             reward_seek_bias = motivation_context.get("reward_seek_bias")
             predation_bias = motivation_context.get("predation_bias")
+            task_set_bias = motivation_context.get("task_set_bias")
             if hunger_bias is not None:
                 hunger_bias_samples.append(float(hunger_bias))
             if reward_seek_bias is not None:
                 reward_seek_bias_samples.append(float(reward_seek_bias))
             if predation_bias is not None:
                 predation_bias_samples.append(float(predation_bias))
+            if task_set_bias is not None:
+                task_set_bias_samples.append(float(task_set_bias))
             prey_permission = state.get("prey_permission")
             fast_target_lock = state.get("fast_target_lock")
             fast_loop_gate = state.get("fast_loop_gate")
@@ -868,6 +924,7 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
                         "hunger_bias": hunger_bias,
                         "reward_seek_bias": reward_seek_bias,
                         "predation_bias": predation_bias,
+                        "task_set_bias": task_set_bias,
                         "prey_permission": prey_permission,
                         "fast_target_lock": fast_target_lock,
                         "fast_loop_gate": fast_loop_gate,
@@ -978,6 +1035,7 @@ def run_single_task(task: BenchmarkTask) -> Dict[str, Any]:
         "avg_hunger_bias": safe_mean(hunger_bias_samples),
         "avg_reward_seek_bias": safe_mean(reward_seek_bias_samples),
         "avg_predation_bias": safe_mean(predation_bias_samples),
+        "avg_task_set_bias": safe_mean(task_set_bias_samples),
         "avg_prey_permission": safe_mean(prey_permission_samples),
         "avg_fast_target_lock": safe_mean(fast_target_lock_samples),
         "avg_fast_loop_gate": safe_mean(fast_loop_gate_samples),
