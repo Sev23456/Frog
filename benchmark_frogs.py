@@ -31,6 +31,8 @@ except Exception:  # pragma: no cover - torch is optional
 
 from frog_lib_ann.simulation import ANNFlyCatchingSimulation
 from frog_lib_ann_frozen.simulation import ANNFlyCatchingSimulation as ANNFrozenSimulation
+from frog_lib_ann_sated.simulation import ANNFlyCatchingSimulation as ANNSatedSimulation
+from frog_lib_ann_frozen_sated.simulation import ANNFlyCatchingSimulation as ANNFrozenSatedSimulation
 from frog_lib_snn.simulation import SNNFlyCatchingSimulation
 from frog_lib_snn_frozen.simulation import SNNFlyCatchingSimulation as SNNFrozenSimulation
 from Frog_predator_neuro.simulation import Simulation as BioSimulation
@@ -46,6 +48,8 @@ from Frog_predator_neuro_dual_fast_compare.simulation import Simulation as BioDu
 ARCHITECTURES: Tuple[str, ...] = (
     "ANN",
     "ANN_FROZEN",
+    "ANN_SATED",
+    "ANN_FROZEN_SATED",
     "SNN",
     "SNN_FROZEN",
     "BIO",
@@ -388,7 +392,7 @@ def energy_bucket_name(energy_ratio: float) -> str:
 
 
 def architecture_family(arch: str) -> str:
-    if arch in {"ANN", "ANN_FROZEN"}:
+    if arch in {"ANN", "ANN_FROZEN", "ANN_SATED", "ANN_FROZEN_SATED"}:
         return "ANN"
     if arch in {"SNN", "SNN_FROZEN"}:
         return "SNN"
@@ -412,6 +416,10 @@ def instantiate_simulation(arch: str, training_mode: bool, model_seed: int):
         return ANNFlyCatchingSimulation(headless=True, training_mode=training_mode)
     if arch == "ANN_FROZEN":
         return ANNFrozenSimulation(headless=True, training_mode=training_mode)
+    if arch == "ANN_SATED":
+        return ANNSatedSimulation(headless=True, training_mode=training_mode)
+    if arch == "ANN_FROZEN_SATED":
+        return ANNFrozenSatedSimulation(headless=True, training_mode=training_mode)
     if arch == "SNN":
         return SNNFlyCatchingSimulation(headless=True, training_mode=training_mode)
     if arch == "SNN_FROZEN":
@@ -436,7 +444,7 @@ def instantiate_simulation(arch: str, training_mode: bool, model_seed: int):
 
 
 def primary_agent(sim: Any, arch: str) -> Any:
-    if arch in {"ANN", "ANN_FROZEN", "SNN", "SNN_FROZEN"}:
+    if arch in {"ANN", "ANN_FROZEN", "ANN_SATED", "ANN_FROZEN_SATED", "SNN", "SNN_FROZEN"}:
         return sim.frog
     return sim.frogs[0]
 
