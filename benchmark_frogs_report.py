@@ -24,6 +24,10 @@ except Exception:  # pragma: no cover - plotting is optional
 ARCH_COLORS = {
     "ANN": "#2f80ed",
     "ANN_FROZEN": "#7fb3ff",
+    "ANN_SATED": "#1f5fbf",
+    "ANN_FROZEN_SATED": "#9ec5ff",
+    "ANN_SOFT_SATED": "#154a94",
+    "ANN_FROZEN_SOFT_SATED": "#7aa7e6",
     "SNN": "#27ae60",
     "SNN_FROZEN": "#7bd8a3",
     "BIO": "#e67e22",
@@ -332,6 +336,8 @@ def generate_report(output_dir: Path) -> Path:
     lines.append("- `adult` corresponds to `training_mode=False`; `developmental` corresponds to `training_mode=True`.")
     lines.append("- Spawn seeds control the fly spawn stream; repeats keep the spawn stream but vary runtime randomness.")
     lines.append("- `ANN_FROZEN` and `SNN_FROZEN` keep the same architectures and sensors but disable online weight updates during the run.")
+    lines.append("- `ANN_SATED` and `ANN_FROZEN_SATED` keep the ANN sensorimotor stack but add a satiety gate that suppresses tongue strikes while the frog is still energetically full.")
+    lines.append("- `ANN_SOFT_SATED` and `ANN_FROZEN_SOFT_SATED` keep the ANN stack but replace the hard satiety gate with continuous strike attenuation and a reduced learning reward for catches made while already full.")
     lines.append("- `BIO_DUAL` is a copied descendant of the current BIO runtime with an internal slow-vs-fast prey-capture split, not an external controller.")
     lines.append("- `*_COMPARE` variants keep the same bio runtime but add a benchmark task-set floor to prey motivation, so satiety modulates hunting less aggressively and cross-architecture comparisons are fairer.")
     lines.append("- ANN and SNN developmental modes are lighter-weight than BIO/BIO_DUAL developmental mode, so those rows should be interpreted as `training-like juvenile conditions`, not as fully symmetric ontogeny.")
